@@ -81,8 +81,10 @@ public void Main(string args, UpdateType asdf) {
 		}
 	}
 
+	//List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
+	//GridTerminalSystem.GetBlocksOfType<IMyShipController>(blocks);
 
-
+	//cont = (IMyShipController)blocks[0];
 
 	Vector3D grav = cont.GetNaturalGravity();
 	MyShipMass shipMass = cont.CalculateShipMass();
@@ -91,17 +93,17 @@ public void Main(string args, UpdateType asdf) {
 	Vector3D gravForce = grav * mass;
 
 	Echo($"Ship Mass: {mass}");
+	Echo($"Grav Acceleration: {grav.Round(0).Length().Round(0)}");
 
-	Echo($"Grav Acceleration: {grav.Round(0).Length()}");
-	Echo($"Grav Weight: {gravForce.Round(0).Length()}");
 	Vector3D pos_gravForce = (gravForce - Vector3D.Abs(gravForce))/2;
 	Vector3D neg_gravForce = gravForce - pos_gravForce;
-	Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Round(0).Length()}");
+
+	Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");//yes, things only have weight when they are in gravity... shut up
+	Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Length().Round(0)}");
 
 
-	//TODO:
-	//add up all max thrust
-	//evenly spread gravity between them
+	// add up all max thrust
+	// evenly spread gravity between them
 	Vector3D pos_totalThrust = Vector3D.Zero;
 	Vector3D neg_totalThrust = Vector3D.Zero;
 	foreach(var gridKV in grids) {
@@ -117,7 +119,16 @@ public void Main(string args, UpdateType asdf) {
 		grid.pos_relThrust = grid.pos_maxThrust / pos_totalThrust;
 		grid.neg_relThrust = grid.neg_maxThrust / neg_totalThrust;
 
+		grid.pos_relThrust = grid.pos_relThrust.NaNtoZero();
+		grid.neg_relThrust = grid.neg_relThrust.NaNtoZero();
+		
+		Echo($"Grid Rel: {(grid.pos_relThrust + grid.neg_relThrust).Length().Round(0)}");
+		Echo($"Grid RelP: {grid.pos_relThrust.Length().Round(0)}");
+		Echo($"Grid RelN: {grid.neg_relThrust.Length().Round(0)}");
+
+
 		grid.go(grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce, mass);
+		Echo($"Grav Weight: {(grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce).Length().Round(0)}");
 		Echo("Setting Grid Thrust");
 	}
 	Echo($"Program Counter: {programCounter}");
@@ -260,8 +271,9 @@ public class Subgrid {
 		Vector3D move = getMovement() * mass;
 
 
+
 		foreach(IMyThrust thruster in thrusters) {
-			Vector3D rel = thruster.MaxEffectiveThrust / (pos_maxThrust + neg_maxThrust);
+			double rel = thruster.MaxEffectiveThrust / (pos_maxThrust + neg_maxThrust).Length();
 			thruster.setThrust(rel * (move + requiredVec));
 		}
 
@@ -275,8 +287,9 @@ public class Subgrid {
 		foreach(IMyThrust thruster in thrusters) {
 			Vector3D exhaust = thruster.WorldMatrix.Backward * thruster.MaxEffectiveThrust;
 
-			pos_maxThrust = (exhaust - Vector3D.Abs(exhaust))/2;
-			neg_maxThrust = exhaust - pos_maxThrust;
+			Vector3D temp = (exhaust - Vector3D.Abs(exhaust))/2;
+			pos_maxThrust += temp;
+			neg_maxThrust += exhaust - temp;
 
 			//if(exhaust.X > 0) {
 			//	pos_maxThrust.X += exhaust.X;
@@ -373,4 +386,22 @@ public static class CustomProgramExtensions {
 
 	public static Vector3D getWorldMoveIndicator(this IMyShipController controller) {
 		return Vector3D.TransformNormal(controller.MoveIndicator, controller.WorldMatrix);
+	}
+
+	public static bool IsNaN(this double val) {
+		return double.IsNaN(val);
+	}
+
+	public static Vector3D NaNtoZero(this Vector3D val) {
+		if(val.X.IsNaN()) {
+			val.X = 0;
+		}
+		if(val.Y.IsNaN()) {
+			val.Y = 0;
+		}
+		if(val.Z.IsNaN()) {
+			val.Z = 0;
+		}
+
+		return val;
 	}
