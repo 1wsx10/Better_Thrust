@@ -98,7 +98,7 @@ public void Main(string args, UpdateType asdf) {
 	Vector3D pos_gravForce = (gravForce - Vector3D.Abs(gravForce))/2;
 	Vector3D neg_gravForce = gravForce - pos_gravForce;
 
-	Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");//yes, things only have weight when they are in gravity... shut up
+	Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");
 	Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Length().Round(0)}");
 
 
@@ -123,12 +123,14 @@ public void Main(string args, UpdateType asdf) {
 		grid.neg_relThrust = grid.neg_relThrust.NaNtoZero();
 		
 		Echo($"Grid Rel: {(grid.pos_relThrust + grid.neg_relThrust).Length().Round(0)}");
-		Echo($"Grid RelP: {grid.pos_relThrust.Length().Round(0)}");
-		Echo($"Grid RelN: {grid.neg_relThrust.Length().Round(0)}");
+		Echo($"Grid RelP: {grid.pos_relThrust.Round(0)}");
+		Echo($"Grid RelN: {grid.neg_relThrust.Round(0)}");
 
-
-		grid.go(grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce, mass);
-		Echo($"Grav Weight: {(grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce).Length().Round(0)}");
+		Vector3D finalReq = grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce;
+		grid.go(finalReq, mass);
+		Echo($"final req: {finalReq.Length().Round(0)}");
+		Echo(grid.errStr);
+		grid.errStr = "";
 		Echo("Setting Grid Thrust");
 	}
 	Echo($"Program Counter: {programCounter}");
@@ -230,6 +232,8 @@ public class Subgrid {
 	public Vector3D neg_relThrust = Vector3D.Zero;
 	public Vector3D pos_relThrust = Vector3D.Zero;
 
+	public string errStr = "";
+
 	public Subgrid(Program prog, IMyCubeGrid grid, HashSet<IMyThrust> thrusters, HashSet<IMyShipController> controllers) {
 		this.program = prog;
 		this.grid = grid;
@@ -268,13 +272,24 @@ public class Subgrid {
 
 	public void go(Vector3D requiredVec, float mass) {
 		//make each one then do its own combined moveIndicator
-		Vector3D move = getMovement() * mass;
+		Vector3D move = getMovement() * -1 * mass * 10000;
 
 
 
 		foreach(IMyThrust thruster in thrusters) {
-			double rel = thruster.MaxEffectiveThrust / (pos_maxThrust + neg_maxThrust).Length();
-			thruster.setThrust(rel * (move + requiredVec));
+
+			// double rel = thruster.MaxEffectiveThrust / (pos_maxThrust + neg_maxThrust).Length();
+			double rel;
+			if(thruster.WorldMatrix.Backward.dot(pos_maxThrust) > 0) {
+				rel = thruster.MaxEffectiveThrust / pos_maxThrust.project(thruster.WorldMatrix.Backward).Length();
+			} else {
+				rel = thruster.MaxEffectiveThrust / neg_maxThrust.project(thruster.WorldMatrix.Backward).Length();
+			}
+
+
+			string thrustErr;
+			thruster.setThrust(rel * (move + requiredVec), out thrustErr);
+			errStr += $"\nthruster: {thruster.CustomName}\nreq: {requiredVec.Length().Round(0)}\nrel: {rel.Round(1)}\nmax: {thruster.MaxEffectiveThrust.Round(0)}\nmaxthr: {(pos_maxThrust + neg_maxThrust).Length().Round(1)}\n{thrustErr}\n";
 		}
 
 		//requiredVec *= total_thrust * -1;
@@ -369,8 +384,29 @@ public static class CustomProgramExtensions {
 			return;
 		}
 
-		thruster.ThrustOverride = (float)proj.Length() * thruster.MaxThrust / thruster.MaxEffectiveThrust;
+		thruster.ThrustOverride = (float)proj.Length();
 	}
+
+	public static void setThrust(this IMyThrust thruster, Vector3D desired, out string error) {
+		error = "";
+		var proj = desired.project(thruster.WorldMatrix.Backward);
+
+		if(proj.dot(thruster.WorldMatrix.Backward) > 0) {//negative * negative is positive... so if its greater than 0, you ignore it.
+			thruster.ThrustOverride = 0;
+			error += "wrong way";
+			return;
+		}
+		error += $"right way";
+		error += $"\nproportion: {(proj.Length() / desired.Length()).Round(2)}";
+		error += $"\nproj: {proj.Length().Round(1)}";
+		error += $"\ndes: {desired.Length().Round(1)}";
+
+		error += $"\nproj: {proj.Round(1)}";
+		error += $"\ndesired: {desired.Round(1)}";
+
+		thruster.ThrustOverride = (float)proj.Length();
+	}
+
 
 	public static Vector3D Round(this Vector3D vec, int num) {
 		return Vector3D.Round(vec, num);
