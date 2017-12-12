@@ -6,33 +6,19 @@ public const bool onlyMainCockpit = false;
 
 
 
-public void write(string str) {
-	if(usableScreens.Count > 0) {
-		str += "\n";
-		foreach(IMyTextPanel screen in usableScreens) {
-			screen.WritePublicText(str, globalAppend);
-			screen.ShowPublicTextOnScreen();
-		}
-		globalAppend = true;
-	} else {
-		if(globalAppend) return;
-		Echo("No screens available");
-		globalAppend = true;
-	}
-}
-public void getScreens(List<IMyTextPanel> screens) {
-	usableScreens.Clear();
-	foreach(IMyTextPanel screen in screens) {
-		if(!screen.IsWorking) continue;
-		if(!screen.CustomName.ToLower().Contains(LCDName.ToLower())) continue;
-		usableScreens.Add(screen);
-	}
-}
-public List<IMyTextPanel> usableScreens = new List<IMyTextPanel>();
-public bool globalAppend = false;
-public const string LCDName = "LCD";
 
-public bool standby = true;
+
+
+
+
+
+
+
+
+
+
+
+
 
 public Program() {
 	JustCompiled = true;
@@ -43,31 +29,35 @@ public Program() {
 public int programCounter = 0;
 public void Main(string args, UpdateType asdf) {
 	programCounter++;
-	globalAppend = false;
-	Echo("before setup");
+
+	String spinner = "";
+	switch(programCounter/10%4) {
+		case 0:
+			spinner = "|";
+		break;
+		case 1:
+			spinner = "\\";
+		break;
+		case 2:
+			spinner = "-";
+		break;
+		case 3:
+			spinner = "/";
+		break;
+	}
+	Echo(spinner);
+
+
+	//Echo("before setup");
 	if(!IsMassTheSame(findACockpit())) {// this is null safe
 		setup();
 	}
 	IMyShipController cont = findACockpit();
 	if(cont == null) return;
 
-	Echo("After setup\nstarting to add grids");
+	//Echo("After setup\nstarting to add grids");
 
 
-	// Vector3D pos_thrust = Vector3D.Zero;
-	// Vector3D neg_thrust = Vector3D.Zero;
-	// Vector3D abs_thrust = Vector3D.Zero;
-	// double total_thrust = 0;
-	// int total_thrusters = 0;
-
-	// foreach(var gridKV in grids) {
-	// 	foreach(IMyThrust thrust in gridKV.Value.thrusters) {
-	// 		if(!thrust.IsWorking) continue;
-
-	// 		abs_thrust += Vector3D.Abs(thrust.WorldMatrix.Down);
-	// 		total_thrust += thrust.MaxEffectiveThrust;
-	// 	}
-	// }
 
 	// dampeners
 	if(mainController != null && mainController.DampenersOverride) {
@@ -91,10 +81,6 @@ public void Main(string args, UpdateType asdf) {
 		}
 	}
 
-	//List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
-	//GridTerminalSystem.GetBlocksOfType<IMyShipController>(blocks);
-
-	//cont = (IMyShipController)blocks[0];
 
 	Vector3D grav = cont.GetNaturalGravity();
 	MyShipMass shipMass = cont.CalculateShipMass();
@@ -102,14 +88,14 @@ public void Main(string args, UpdateType asdf) {
 
 	Vector3D gravForce = grav * mass;
 
-	Echo($"Ship Mass: {mass}");
-	Echo($"Grav Acceleration: {grav.Round(0).Length().Round(0)}");
+	//Echo($"Ship Mass: {mass}");
+	//Echo($"Grav Acceleration: {grav.Round(0).Length().Round(0)}");
 
 	Vector3D pos_gravForce = (gravForce - Vector3D.Abs(gravForce))/2;
 	Vector3D neg_gravForce = gravForce - pos_gravForce;
 
-	Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");
-	Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Length().Round(0)}");
+	//Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");
+	//Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Length().Round(0)}");
 
 
 	// add up all max thrust
@@ -136,25 +122,23 @@ public void Main(string args, UpdateType asdf) {
 		grid.pos_relThrust = grid.pos_relThrust.NaNtoZero();
 		grid.neg_relThrust = grid.neg_relThrust.NaNtoZero();
 
-		Echo($"Grid Rel: {(grid.pos_relThrust + grid.neg_relThrust).Length().Round(0)}");
-		Echo($"Grid RelP: {grid.pos_relThrust.Round(0)}");
-		Echo($"Grid RelN: {grid.neg_relThrust.Round(0)}");
+		//Echo($"Grid Rel: {(grid.pos_relThrust + grid.neg_relThrust).Length().Round(0)}");
+		//Echo($"Grid RelP: {grid.pos_relThrust.Round(0)}");
+		//Echo($"Grid RelN: {grid.neg_relThrust.Round(0)}");
 
 		Vector3D finalReq = grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce;
 		grid.go(finalReq, mass);
-		Echo($"final req: {finalReq.Length().Round(0)}");
-		Echo(grid.errStr);
+		//Echo($"final req: {finalReq.Length().Round(0)}");
+		//Echo(grid.errStr);
 		grid.errStr = "";
-		Echo("Setting Grid Thrust");
+		//Echo("Setting Grid Thrust");
 	}
-	Echo($"Program Counter: {programCounter}");
+	//Echo($"Program Counter: {programCounter}");
 
 
 
 	JustCompiled = false;
 }
-
-public void Save() {}
 
 public Dictionary<IMyCubeGrid, Subgrid> grids = new Dictionary<IMyCubeGrid, Subgrid>();
 public float oldMass;
@@ -170,10 +154,9 @@ public bool IsMassTheSame(IMyShipController cont) {
 
 public void setup() {
 	List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
-	GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(blocks);
+	GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(blocks, block => block is IMyShipController || block is IMyThrust);
 
 	grids.Clear();
-	List<IMyTextPanel> screens = new List<IMyTextPanel>();
 
 	foreach(IMyTerminalBlock block in blocks) {
 		if(!grids.ContainsKey(block.CubeGrid)) {
@@ -200,11 +183,7 @@ public void setup() {
 		        grids[block.CubeGrid].Add(block);
 		}
 
-		if(block is IMyTextPanel) {
-			screens.Add((IMyTextPanel)block);
-		}
 	}
-	getScreens(screens);
 
 
 }
@@ -287,31 +266,6 @@ public class Subgrid {
 		}
 	}
 
-	// public void go(Vector3D requiredVec, float mass) {
-	// 	//make each one then do its own combined moveIndicator
-	// 	Vector3D move = getMovement() * -1 * mass * 10000;
-
-
-
-	// 	foreach(IMyThrust thruster in thrusters) {
-
-	// 		// double rel = thruster.MaxEffectiveThrust / (pos_maxThrust + neg_maxThrust).Length();
-	// 		double rel;
-	// 		if(thruster.WorldMatrix.Backward.dot(pos_maxThrust) > 0) {
-	// 			rel = thruster.MaxEffectiveThrust / pos_maxThrust.project(thruster.WorldMatrix.Backward).Length();
-	// 		} else {
-	// 			rel = thruster.MaxEffectiveThrust / neg_maxThrust.project(thruster.WorldMatrix.Backward).Length();
-	// 		}
-
-
-	// 		string thrustErr;
-	// 		thruster.setThrust(rel * (move + requiredVec), out thrustErr);
-	// 		errStr += $"\nthruster: {thruster.CustomName}\nreq: {requiredVec.Length().Round(0)}\nrel: {rel.Round(1)}\nmax: {thruster.MaxEffectiveThrust.Round(0)}\nmaxthr: {(pos_maxThrust + neg_maxThrust).Length().Round(1)}\n{thrustErr}\n";
-	// 	}
-
-	// 	//requiredVec *= total_thrust * -1;
-	// }
-
 	public void go(Vector3D requiredVec, float mass) {
 		//make each one then do its own combined moveIndicator
 		Vector3D move = getMovement() * -1 * mass * 10000;
@@ -330,9 +284,9 @@ public class Subgrid {
 
 			double rel = thruster.MaxEffectiveThrust / fullThrustInEngineDirection.Length();
 
-			string thrustErr;
-			thruster.setThrust(rel * (move + requiredVec) * thruster.MaxThrust / thruster.MaxEffectiveThrust, out thrustErr);
-			errStr += $"\nthruster: {thruster.CustomName}\nreq: {requiredVec.Length().Round(0)}\nrel: {rel.Round(1)}\nmax: {thruster.MaxEffectiveThrust.Round(0)}\nmaxthr: {(pos_maxThrust + neg_maxThrust).Length().Round(1)}\n{thrustErr}\n";
+			//string thrustErr;
+			thruster.setThrust(rel * (move + requiredVec) * thruster.MaxThrust / thruster.MaxEffectiveThrust);
+			//errStr += $"\nthruster: {thruster.CustomName}\nreq: {requiredVec.Length().Round(0)}\nrel: {rel.Round(1)}\nmax: {thruster.MaxEffectiveThrust.Round(0)}\nmaxthr: {(pos_maxThrust + neg_maxThrust).Length().Round(1)}\n{thrustErr}\n";
 		}
 	}
 
@@ -352,35 +306,6 @@ public class Subgrid {
 			}
 		}
 	}
-
-	// public void calculateMaxThrust() {
-	// 	pos_maxThrust = Vector3D.Zero;
-	// 	neg_maxThrust = Vector3D.Zero;
-
-	// 	foreach(IMyThrust thruster in thrusters) {
-	// 		Vector3D exhaust = thruster.WorldMatrix.Backward * thruster.MaxEffectiveThrust;
-
-	// 		Vector3D temp = (exhaust - Vector3D.Abs(exhaust))/2;
-	// 		pos_maxThrust += temp;
-	// 		neg_maxThrust += exhaust - temp;
-
-	// 		//if(exhaust.X > 0) {
-	// 		//	pos_maxThrust.X += exhaust.X;
-	// 		//} else {
-	// 		//	neg_maxThrust.X += exhaust.X;
-	// 		//}
-	// 		//if(exhaust.Y > 0) {
-	// 		//	pos_maxThrust.Y += exhaust.Y;
-	// 		//} else {
-	// 		//	neg_maxThrust.Y += exhaust.Y;
-	// 		//}
-	// 		//if(exhaust.Z > 0) {
-	// 		//	pos_maxThrust.Z += exhaust.Z;
-	// 		//} else {
-	// 		//	neg_maxThrust.Z += exhaust.Z;
-	// 		//}
-	// 	}
-	// }
 
 	public Vector3D getMovement() {
 		// movement controls
