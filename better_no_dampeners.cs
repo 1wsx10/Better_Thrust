@@ -4,6 +4,10 @@
 // no main cockpit: any cockpits can be used
 public const bool onlyMainCockpit = false;
 
+// script will completely ignore any block with this in the name
+// if you add this to a blocks name, you need to cause an update: recompile or change the ship mass
+public const string ignore = "---";
+
 
 
 
@@ -28,10 +32,9 @@ public Program() {
 
 public int programCounter = 0;
 public void Main(string args, UpdateType asdf) {
-	programCounter++;
 
 	String spinner = "";
-	switch(programCounter/10%4) {
+	switch(++programCounter/10%4) {
 		case 0:
 			spinner = "|";
 		break;
@@ -104,17 +107,15 @@ public void Main(string args, UpdateType asdf) {
 	Vector3D neg_totalThrust = Vector3D.Zero;
 
 	foreach(var gridKV in grids) {
-		var grid = gridKV.Value;
+		Subgrid grid = gridKV.Value;
 
 		grid.calculateMaxThrust();
-		grid.pos_maxThrustWorld = grid.pos_maxThrust.TransformNormal(grid.grid.WorldMatrix);
-		grid.neg_maxThrustWorld = grid.neg_maxThrust.TransformNormal(grid.grid.WorldMatrix);
 
 		pos_totalThrust += grid.pos_maxThrustWorld;
 		neg_totalThrust += grid.neg_maxThrustWorld;
 	}
 	foreach(var gridKV in grids) {
-		var grid = gridKV.Value;
+		Subgrid grid = gridKV.Value;
 
 		grid.pos_relThrust = grid.pos_maxThrustWorld / pos_totalThrust;
 		grid.neg_relThrust = grid.neg_maxThrustWorld / neg_totalThrust;
@@ -146,15 +147,18 @@ public bool JustCompiled;
 public IMyShipController mainController;
 
 public bool IsMassTheSame(IMyShipController cont) {
-	if(!JustCompiled) return false;
+	if(JustCompiled) return false;
 	if(cont == null || !cont.IsWorking) return false;
 	var mass = cont.CalculateShipMass();
-	return oldMass == mass.BaseMass;
+	bool output = Math.Abs(oldMass - mass.BaseMass) < 0.01;
+	oldMass = mass.BaseMass;
+	return output;
 }
 
 public void setup() {
 	List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
-	GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(blocks, block => block is IMyShipController || block is IMyThrust);
+	GridTerminalSystem.GetBlocksOfType<IMyTerminalBlock>(blocks, block => (block is IMyShipController || block is IMyThrust) && !block.CustomName.ToLower().Contains(ignore));
+	Echo($"*count: {blocks.Count}");
 
 	grids.Clear();
 
@@ -305,6 +309,9 @@ public class Subgrid {
 				neg_maxThrust += engineDir * thruster.MaxEffectiveThrust;
 			}
 		}
+
+		pos_maxThrustWorld = pos_maxThrust.TransformNormal(grid.WorldMatrix);
+		neg_maxThrustWorld = neg_maxThrust.TransformNormal(grid.WorldMatrix);
 	}
 
 	public Vector3D getMovement() {
