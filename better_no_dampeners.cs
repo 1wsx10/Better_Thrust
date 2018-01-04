@@ -25,7 +25,6 @@ public const string ignore = "---";
 
 
 public Program() {
-	JustCompiled = true;
 	oldMass = 0;
 	Runtime.UpdateFrequency = UpdateFrequency.Update1;
 }
@@ -52,11 +51,17 @@ public void Main(string args, UpdateType asdf) {
 
 
 	//Echo("before setup");
-	if(!IsMassTheSame(findACockpit())) {// this is null safe
-		setup();
-	}
 	IMyShipController cont = findACockpit();
-	if(cont == null) return;
+	if(!IsMassTheSame(findACockpit())) {// this is null safe, doesn't call GTS, only checks PB memory for cockpit
+		setup();//single, solitary call to GTS
+	}
+	if(cont == null || !cont.IsWorking) {
+		cont = findACockpit();
+		if(cont == null || !cont.IsWorking) {
+			Echo("Exiting.");
+			return;
+		}
+	}
 
 	//Echo("After setup\nstarting to add grids");
 
@@ -72,16 +77,27 @@ public void Main(string args, UpdateType asdf) {
 		}
 		return;
 	}
+	bool dampeners = false;
+	// check controllers
 	foreach(var gridKV in grids) {
 		Subgrid grid = gridKV.Value;
-		foreach(IMyThrust thruster in grid.thrusters) {
-			thruster.ThrustOverride = 0;
-		}
 		foreach(IMyShipController controller in grid.controllers) {
 			if(controller.DampenersOverride) {
-				return;
+				dampeners = true;
+				break;
 			}
 		}
+		if(dampeners) break;
+	}
+	// stop if dampeners
+	if(dampeners) {
+		foreach(var gridKV in grids) {
+			Subgrid grid = gridKV.Value;
+			foreach(IMyThrust thruster in grid.thrusters) {
+				thruster.ThrustOverride = 0;
+			}
+		}
+		return;
 	}
 
 
@@ -94,11 +110,14 @@ public void Main(string args, UpdateType asdf) {
 	//Echo($"Ship Mass: {mass}");
 	//Echo($"Grav Acceleration: {grav.Round(0).Length().Round(0)}");
 
-	Vector3D pos_gravForce = (gravForce - Vector3D.Abs(gravForce))/2;
+	Vector3D pos_gravForce = (gravForce + Vector3D.Abs(gravForce))/2;
 	Vector3D neg_gravForce = gravForce - pos_gravForce;
 
 	//Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");
 	//Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Length().Round(0)}");
+
+	// Echo($"pos gforce: {pos_gravForce.Round(0)}");
+	// Echo($"neg gforce: {neg_gravForce.Round(0)}");
 
 	Vector3D move = getMovement() * -1 * mass * 10000;
 
@@ -118,28 +137,30 @@ public void Main(string args, UpdateType asdf) {
 	foreach(var gridKV in grids) {
 		Subgrid grid = gridKV.Value;
 
-		grid.pos_relThrust = grid.pos_maxThrustWorld / pos_totalThrust;
-		grid.neg_relThrust = grid.neg_maxThrustWorld / neg_totalThrust;
+		grid.pos_relThrust = (grid.pos_maxThrustWorld / pos_totalThrust).NaNtoZero();
+		grid.neg_relThrust = (grid.neg_maxThrustWorld / neg_totalThrust).NaNtoZero();
 
-		grid.pos_relThrust = grid.pos_relThrust.NaNtoZero();
-		grid.neg_relThrust = grid.neg_relThrust.NaNtoZero();
+		// Echo("\n");
 
-		//Echo($"Grid Rel: {(grid.pos_relThrust + grid.neg_relThrust).Length().Round(0)}");
-		//Echo($"Grid RelP: {grid.pos_relThrust.Round(0)}");
-		//Echo($"Grid RelN: {grid.neg_relThrust.Round(0)}");
+		// Echo($"pos max world: {(grid.pos_maxThrustWorld / 100).Round(0) * 100}");
+		// Echo($"neg max world: {(grid.neg_maxThrustWorld / 100).Round(0) * 100}");
+
+		// Echo($"pos total thrust world: {(pos_totalThrust / 100).Round(0) * 100}");
+		// Echo($"neg total thrust world: {(neg_totalThrust / 100).Round(0) * 100}");
+		// Echo("\n");
+
+		// Echo($"Grid Rel: {(grid.pos_relThrust + grid.neg_relThrust).Length().Round(1)}");
+		// Echo($"Grid RelP: {grid.pos_relThrust.Round(1)}");
+		// Echo($"Grid RelN: {grid.neg_relThrust.Round(1)}");
 
 		Vector3D finalGrav = grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce;
 		grid.go(finalGrav, move, mass);
-		//Echo($"final req: {finalGrav.Length().Round(0)}");
-		//Echo(grid.errStr);
-		grid.errStr = "";
+		// Echo($"final req: {finalGrav.Round(0)}");
+		// Echo(grid.errStr);
+		// grid.errStr = "";
 		//Echo("Setting Grid Thrust");
 	}
 	//Echo($"Program Counter: {programCounter}");
-
-
-
-	JustCompiled = false;
 }
 
 public Dictionary<IMyCubeGrid, Subgrid> grids = new Dictionary<IMyCubeGrid, Subgrid>();
@@ -148,10 +169,15 @@ public bool JustCompiled;
 public IMyShipController mainController;
 
 public bool IsMassTheSame(IMyShipController cont) {
-	if(JustCompiled) return false;
-	if(cont == null || !cont.IsWorking) return false;
+	if(cont == null || !cont.IsWorking) {
+		Echo("No active ship controller found.");
+		return false;
+	}
 	var mass = cont.CalculateShipMass();
 	bool output = Math.Abs(oldMass - mass.BaseMass) < 0.01;
+	if(!output) {
+		Echo($"*mass not the same, performing setup.\ndiff: {Math.Abs(oldMass - mass.BaseMass).Round(3)}");
+	}
 	oldMass = mass.BaseMass;
 	return output;
 }
@@ -255,7 +281,7 @@ public class Subgrid {
 	public Vector3D neg_relThrust = Vector3D.Zero;
 	public Vector3D pos_relThrust = Vector3D.Zero;
 
-	public string errStr = "";
+	// public string errStr = "";
 
 	public Subgrid(Program prog, IMyCubeGrid grid, HashSet<IMyThrust> thrusters, HashSet<IMyShipController> controllers) {
 		this.program = prog;
@@ -310,30 +336,42 @@ public class Subgrid {
 
 			double rel = thruster.MaxEffectiveThrust / fullThrustInEngineDirection.Length();
 
-			//string thrustErr;
-			thruster.setThrust(rel * (move + requiredVec) * thruster.MaxThrust / thruster.MaxEffectiveThrust);
-			//errStr += $"\nthruster: {thruster.CustomName}\nreq: {requiredVec.Length().Round(0)}\nrel: {rel.Round(1)}\nmax: {thruster.MaxEffectiveThrust.Round(0)}\nmaxthr: {(pos_maxThrust + neg_maxThrust).Length().Round(1)}\n{thrustErr}\n";
+			// compensation for lower efficiency
+			double comp = thruster.MaxThrust / thruster.MaxEffectiveThrust;
+
+			// finally, fire the thruster
+			thruster.setThrust(rel * (move + requiredVec) * comp);
+
+			// data reporting
+			// Vector3D proj = requiredVec.project(thruster.WorldMatrix.Backward);
+			// double required = (proj.dot(thruster.WorldMatrix.Backward) > 0) ? (proj.Length().Round(0)) : 0;
+			// errStr += $"\nthruster: {thruster.CustomName}\nbackward: {thruster.WorldMatrix.Backward.Round(1)}\nrequired: {required}\nrelative for this direction: {rel.Round(1)}\nmax: {thruster.MaxEffectiveThrust.Round(0)}\nefficiency compensation: {comp.Round(1)}\n";
 		}
 	}
 
 	// grid coordinates, not world coordinates
 	public void calculateMaxThrust() {
-		Vector3D positive = new Vector3D(1, 1, 1);
+		pos_maxThrustWorld = Vector3D.Zero;
+		neg_maxThrustWorld = Vector3D.Zero;
 		pos_maxThrust = Vector3D.Zero;
 		neg_maxThrust = Vector3D.Zero;
 
 		foreach(IMyThrust thruster in thrusters) {
-			Vector3 engineDir = thruster.Orientation.Forward.GetVector();
+			Vector3D engineDir = thruster.Orientation.Forward.GetVector();
 
-			if(positive.dot(engineDir) > 0) {
-				pos_maxThrust += engineDir * thruster.MaxEffectiveThrust;
-			} else {
-				neg_maxThrust += engineDir * thruster.MaxEffectiveThrust;
-			}
+			Vector3D engineForce = engineDir * thruster.MaxEffectiveThrust;
+			Vector3D engineForceWorld = engineForce.TransformNormal(grid.WorldMatrix);
+
+			// split into positive and negative
+			Vector3D positive = (engineForce + engineForce.Abs())/2;
+			pos_maxThrust += positive;
+			neg_maxThrust += engineForce - positive;
+
+			// and for world space too
+			positive = (engineForceWorld + engineForceWorld.Abs())/2;
+			pos_maxThrustWorld += positive;
+			neg_maxThrustWorld += engineForceWorld - positive;
 		}
-
-		pos_maxThrustWorld = pos_maxThrust.TransformNormal(grid.WorldMatrix);
-		neg_maxThrustWorld = neg_maxThrust.TransformNormal(grid.WorldMatrix);
 	}
 
 	public void Add(IMyTerminalBlock block) {
@@ -370,6 +408,10 @@ public static class CustomProgramExtensions {
 		return Vector3D.Reject(a, b);
 	}
 
+	public static Vector3D Normalized(this Vector3D vec) {
+		return Vector3D.Normalize(vec);
+	}
+
 	public static void setThrust(this IMyThrust thruster, Vector3D desired) {
 		var proj = desired.project(thruster.WorldMatrix.Backward);
 
@@ -401,6 +443,9 @@ public static class CustomProgramExtensions {
 		thruster.ThrustOverride = (float)proj.Length();
 	}
 
+	public static Vector3D Abs(this Vector3D vec) {
+		return Vector3D.Abs(vec);
+	}
 
 	public static Vector3D Round(this Vector3D vec, int num) {
 		return Vector3D.Round(vec, num);
