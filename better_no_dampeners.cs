@@ -100,6 +100,7 @@ public void Main(string args, UpdateType asdf) {
 	//Echo($"Grav Weight: {gravForce.Round(0).Length().Round(0)}");
 	//Echo($"Grav Weight: {(pos_gravForce + neg_gravForce).Length().Round(0)}");
 
+	Vector3D move = getMovement() * -1 * mass * 10000;
 
 	// add up all max thrust
 	// evenly spread gravity between them
@@ -127,9 +128,9 @@ public void Main(string args, UpdateType asdf) {
 		//Echo($"Grid RelP: {grid.pos_relThrust.Round(0)}");
 		//Echo($"Grid RelN: {grid.neg_relThrust.Round(0)}");
 
-		Vector3D finalReq = grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce;
-		grid.go(finalReq, mass);
-		//Echo($"final req: {finalReq.Length().Round(0)}");
+		Vector3D finalGrav = grid.pos_relThrust * pos_gravForce + grid.neg_relThrust * neg_gravForce;
+		grid.go(finalGrav, move, mass);
+		//Echo($"final req: {finalGrav.Length().Round(0)}");
 		//Echo(grid.errStr);
 		grid.errStr = "";
 		//Echo("Setting Grid Thrust");
@@ -216,6 +217,28 @@ public IMyShipController findACockpit() {
 	return null;
 }
 
+public Vector3D getMovement() {
+	// movement controls
+	Vector3D moveVec = Vector3D.Zero;
+
+	foreach(var gridKV in grids) {
+		Subgrid grid = gridKV.Value;
+
+		if(mainController != null && (mainController.IsUnderControl || onlyMainCockpit)) {
+			if(!grid.controllers.Contains(mainController)) return Vector3D.Zero;
+			moveVec = mainController.getWorldMoveIndicator();
+		} else {
+			foreach(IMyShipController cont in grid.controllers) {
+				if(cont.IsUnderControl) {
+					moveVec += cont.getWorldMoveIndicator();
+				}
+			}
+		}
+	}
+
+	return moveVec;
+}
+
 public class Subgrid {
 	public Program program;
 
@@ -270,9 +293,8 @@ public class Subgrid {
 		}
 	}
 
-	public void go(Vector3D requiredVec, float mass) {
+	public void go(Vector3D requiredVec, Vector3D move, float mass) {
 		//make each one then do its own combined moveIndicator
-		Vector3D move = getMovement() * -1 * mass * 10000;
 		Vector3D positive = new Vector3D(1, 1, 1);
 
 
@@ -312,24 +334,6 @@ public class Subgrid {
 
 		pos_maxThrustWorld = pos_maxThrust.TransformNormal(grid.WorldMatrix);
 		neg_maxThrustWorld = neg_maxThrust.TransformNormal(grid.WorldMatrix);
-	}
-
-	public Vector3D getMovement() {
-		// movement controls
-		Vector3D moveVec = Vector3D.Zero;
-
-		if(program.mainController != null && (program.mainController.IsUnderControl || onlyMainCockpit)) {
-			if(!controllers.Contains(program.mainController)) return Vector3D.Zero;
-			moveVec = program.mainController.getWorldMoveIndicator();
-		} else {
-			foreach(IMyShipController cont in controllers) {
-				if(cont.IsUnderControl) {
-					moveVec += cont.getWorldMoveIndicator();
-				}
-			}
-		}
-
-		return moveVec;
 	}
 
 	public void Add(IMyTerminalBlock block) {
