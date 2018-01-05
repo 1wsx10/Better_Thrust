@@ -52,7 +52,7 @@ public void Main(string args, UpdateType asdf) {
 
 	//Echo("before setup");
 	IMyShipController cont = findACockpit();
-	if(!IsMassTheSame(findACockpit())) {// this is null safe, doesn't call GTS, only checks PB memory for cockpit
+	if(!IsMassTheSame(cont)) {// this is null safe, doesn't call GTS, only checks PB memory for cockpit
 		setup();//single, solitary call to GTS
 	}
 	if(cont == null || !cont.IsWorking) {
