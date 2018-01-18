@@ -32,8 +32,9 @@ public Program() {
 public int programCounter = 0;
 public void Main(string args, UpdateType asdf) {
 
+	programCounter++;
 	String spinner = "";
-	switch(++programCounter/10%4) {
+	switch(programCounter/10%4) {
 		case 0:
 			spinner = "|";
 		break;
@@ -47,7 +48,7 @@ public void Main(string args, UpdateType asdf) {
 			spinner = "/";
 		break;
 	}
-	Echo(spinner);
+	Echo($"{spinner}\nLast Runtime {Runtime.LastRunTimeMs.Round(2)}ms");
 
 
 	//Echo("before setup");
@@ -69,12 +70,7 @@ public void Main(string args, UpdateType asdf) {
 
 	// dampeners
 	if(mainController != null && mainController.DampenersOverride) {
-		foreach(var gridKV in grids) {
-			Subgrid grid = gridKV.Value;
-			foreach(IMyThrust thruster in grid.thrusters) {
-				thruster.ThrustOverride = 0;
-			}
-		}
+		removeOverride();
 		return;
 	}
 	bool dampeners = false;
@@ -167,6 +163,15 @@ public Dictionary<IMyCubeGrid, Subgrid> grids = new Dictionary<IMyCubeGrid, Subg
 public float oldMass;
 public bool JustCompiled;
 public IMyShipController mainController;
+
+public void removeOverride() {
+	foreach(var gridKV in grids) {
+		Subgrid grid = gridKV.Value;
+		foreach(IMyThrust thruster in grid.thrusters) {
+			thruster.ThrustOverride = 0;
+		}
+	}
+}
 
 public bool IsMassTheSame(IMyShipController cont) {
 	if(cont == null || !cont.IsWorking) {
